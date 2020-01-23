@@ -167,6 +167,9 @@ pub use self::filters::{
     sse,
     // sse() function
     sse::sse,
+    tracing,
+    // tracing() function
+    tracing::tracing,
 };
 #[cfg(feature = "multipart")]
 #[doc(hidden)]
