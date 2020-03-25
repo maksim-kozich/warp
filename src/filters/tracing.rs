@@ -216,7 +216,12 @@ mod internal {
     {
         type Extract = (Traced,);
         type Error = F::Error;
-        type Future = Map<F::Future, fn(F::Extract) -> Self::Extract>;
+        type Future = Instrumented<
+//            Inspect<
+                Map<F::Future, fn(F::Extract) -> Self::Extract>,
+//                    fn(&Result<Self::Extract, F::Error>),
+//                >,
+            >;
 
         fn filter(&self) -> Self::Future {
             let span = route::with(|route| (self.trace.func)(Info { route }));
@@ -227,7 +232,7 @@ mod internal {
                 .filter()
                 .map(convert_reply as fn(F::Extract) -> Self::Extract)
 //                .inspect(finished_logger as fn(&Result<Self::Extract, F::Error>))
-//                .in_current_span()
+                .in_current_span()
         }
     }
 }
