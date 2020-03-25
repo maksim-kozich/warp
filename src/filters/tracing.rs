@@ -1,6 +1,7 @@
 //! Tracing Filters
-
-use tracing::Span;
+extern crate tracing as tracing_ext;
+extern crate tracing_futures as tracing_futures_ext;
+use self::tracing_ext::Span;
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -8,7 +9,7 @@ use std::net::SocketAddr;
 use http::{self, header};
 
 use crate::filter::{Filter, WrapSealed};
-use crate::reject::IsReject;
+use crate::reject::Reject;
 use crate::reply::Reply;
 use crate::route::Route;
 
@@ -84,7 +85,7 @@ where
     FN: Fn(Info) -> Span + Clone + Send,
     F: Filter + Clone + Send,
     F::Extract: Reply,
-    F::Error: IsReject,
+    F::Error: Reject,
 {
     type Wrapped = WithTrace<FN, F>;
 
@@ -155,11 +156,10 @@ impl<T: fmt::Display> fmt::Display for OptFmt<T> {
 }
 
 mod internal {
-    use futures::{future::Inspect, future::MapOk, FutureExt, TryFutureExt};
 
     use super::{Info, Trace};
-    use crate::filter::{Filter, FilterBase, Internal};
-    use crate::reject::IsReject;
+    use crate::filter::{Filter, FilterBase};
+    use crate::reject::Reject;
     use crate::reply::Reply;
     use crate::reply::Response;
     use crate::route;
@@ -181,10 +181,11 @@ mod internal {
         pub(super) trace: Trace<FN>,
     }
 
-    use tracing::Span;
-    use tracing_futures::{Instrument, Instrumented};
+    use super::tracing_ext::Span;
+    use super::tracing_futures_ext::{Instrument, Instrumented};
+    use futures::{future::Inspect, future::Map, future::Future};
 
-    fn finished_logger<E: IsReject>(reply: &Result<(Traced,), E>) {
+    fn finished_logger<E: Reject>(reply: &Result<(Traced,), E>) {
         match reply {
             Ok((Traced(resp),)) => {
                 tracing::info!(target: "warp::filters::tracing", status = %resp.status().as_u16(), "finished processing with success");
@@ -211,27 +212,22 @@ mod internal {
         FN: Fn(Info) -> Span + Clone + Send,
         F: Filter + Clone + Send,
         F::Extract: Reply,
-        F::Error: IsReject,
+        F::Error: Reject,
     {
         type Extract = (Traced,);
         type Error = F::Error;
-        type Future = Instrumented<
-            Inspect<
-                MapOk<F::Future, fn(F::Extract) -> Self::Extract>,
-                fn(&Result<Self::Extract, F::Error>),
-            >,
-        >;
+        type Future = Map<F::Future, fn(F::Extract) -> Self::Extract>;
 
-        fn filter(&self, _: Internal) -> Self::Future {
+        fn filter(&self) -> Self::Future {
             let span = route::with(|route| (self.trace.func)(Info { route }));
             let _guard = span.enter();
 
             tracing::info!(target: "warp::filters::tracing", "processing request");
             self.filter
-                .filter(Internal)
-                .map_ok(convert_reply as fn(F::Extract) -> Self::Extract)
-                .inspect(finished_logger as fn(&Result<Self::Extract, F::Error>))
-                .in_current_span()
+                .filter()
+                .map(convert_reply as fn(F::Extract) -> Self::Extract)
+//                .inspect(finished_logger as fn(&Result<Self::Extract, F::Error>))
+//                .in_current_span()
         }
     }
 }
