@@ -183,25 +183,7 @@ mod internal {
 
     use super::tracing_ext::Span;
     use super::tracing_futures_ext::{Instrument, Instrumented};
-    use futures::{future::Inspect, future::Map, future::Future};
-
-    fn finished_logger<E: Reject>(reply: &Result<(Traced,), E>) {
-        match reply {
-            Ok((Traced(resp),)) => {
-                tracing::info!(target: "warp::filters::tracing", status = %resp.status().as_u16(), "finished processing with success");
-            }
-            Err(e) if e.status().is_server_error() => {
-                tracing::error!(target: "warp::filters::tracing", status = %e.status().as_u16(), msg = ?e, "unable to process request (internal error)");
-            }
-            Err(e) if e.status().is_client_error() => {
-                tracing::warn!(target: "warp::filters::tracing", status = %e.status().as_u16(), msg = ?e, "unable to serve request (client error)");
-            }
-            Err(e) => {
-                // Either informational or redirect
-                tracing::info!(target: "warp::filters::tracing", status = %e.status().as_u16(), msg = ?e, "finished processing with status");
-            }
-        }
-    }
+    use futures::{future::Map, future::Future};
 
     fn convert_reply<R: Reply>(reply: R) -> (Traced,) {
         (Traced(reply.into_response()),)
@@ -217,11 +199,8 @@ mod internal {
         type Extract = (Traced,);
         type Error = F::Error;
         type Future = Instrumented<
-//            Inspect<
-                Map<F::Future, fn(F::Extract) -> Self::Extract>,
-//                    fn(&Result<Self::Extract, F::Error>),
-//                >,
-            >;
+            Map<F::Future, fn(F::Extract) -> Self::Extract>,
+        >;
 
         fn filter(&self) -> Self::Future {
             let span = route::with(|route| (self.trace.func)(Info { route }));
@@ -231,7 +210,6 @@ mod internal {
             self.filter
                 .filter()
                 .map(convert_reply as fn(F::Extract) -> Self::Extract)
-//                .inspect(finished_logger as fn(&Result<Self::Extract, F::Error>))
                 .in_current_span()
         }
     }
