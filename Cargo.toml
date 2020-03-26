@@ -33,11 +33,15 @@ tokio-threadpool = "0.1.7"
 # tls is enabled by default, we don't want that yet
 tungstenite = { default-features = false, version = "0.9", optional = true }
 urlencoding = "1.0.0"
+tracing = "0.1.12"
+tracing-futures = {features = ["futures-01"], version = "0.2.1"}
 
 [dev-dependencies]
 pretty_env_logger = "0.3"
 serde_derive = "1.0"
 handlebars = "1.0.0"
+tracing-subscriber = "0.1.6"
+tracing-log = "0.1.1"
 
 [features]
 default = ["multipart", "websocket"]
